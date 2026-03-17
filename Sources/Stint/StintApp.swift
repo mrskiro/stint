@@ -85,7 +85,7 @@ final class StintTimer {
     private var tickTask: Task<Void, Never>?
     private var blinkTask: Task<Void, Never>?
 
-    var remainingMinutes: Int { (remainingSeconds + 59) / 60 }
+    var remainingMinutes: Int { remainingSeconds / 60 }
 
     init(notifier: Notifier) {
         self.notifier = notifier
