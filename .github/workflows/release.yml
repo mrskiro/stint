@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 0.1.0)"
+        required: true
+
+jobs:
+  release:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      TAG: v${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create tag
+        run: |
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      - name: Build universal binary
+        run: |
+          swift build -c release --arch arm64
+          swift build -c release --arch x86_64
+          lipo -create \
+            .build/arm64-apple-macosx/release/Stint \
+            .build/x86_64-apple-macosx/release/Stint \
+            -output Stint-universal
+
+      - name: Import certificate
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$P12_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$P12_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Create .app bundle
+        run: |
+          mkdir -p Stint.app/Contents/MacOS
+          cp Stint-universal Stint.app/Contents/MacOS/Stint
+          cp Info.plist Stint.app/Contents/Info.plist
+
+      - name: Sign
+        run: |
+          codesign --force --timestamp --options runtime \
+            --sign "Developer ID Application" \
+            Stint.app
+
+      - name: Notarize
+        env:
+          NOTARIZE_KEY: ${{ secrets.NOTARIZE_KEY }}
+          NOTARIZE_KEY_ID: ${{ secrets.NOTARIZE_KEY_ID }}
+          NOTARIZE_ISSUER_ID: ${{ secrets.NOTARIZE_ISSUER_ID }}
+        run: |
+          mkdir -p $RUNNER_TEMP/notarize
+          echo "$NOTARIZE_KEY" | base64 --decode > $RUNNER_TEMP/notarize/key.p8
+
+          ditto -c -k --keepParent Stint.app $RUNNER_TEMP/Stint.zip
+
+          xcrun notarytool submit $RUNNER_TEMP/Stint.zip \
+            --key $RUNNER_TEMP/notarize/key.p8 \
+            --key-id "$NOTARIZE_KEY_ID" \
+            --issuer "$NOTARIZE_ISSUER_ID" \
+            --wait
+
+          xcrun stapler staple Stint.app
+
+      - name: Create zip
+        run: ditto -c -k --keepParent Stint.app "Stint-${TAG}.zip"
+
+      - name: Create GitHub Release
+        run: gh release create "$TAG" "Stint-${TAG}.zip" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
