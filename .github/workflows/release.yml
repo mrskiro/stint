@@ -86,7 +86,7 @@ jobs:
 
       - name: Create dmg
         run: |
-          npm install -g create-dmg
+          npm install -g create-dmg@8.0.0
           create-dmg Stint.app .
           mv *.dmg "Stint-${TAG}.dmg"
 
