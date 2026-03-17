@@ -1,48 +1,130 @@
+import AppKit
 import ServiceManagement
 import SwiftUI
 import UserNotifications
 
 @main
 struct StintApp: App {
-    @State private var timer = StintTimer(notifier: SystemNotifier())
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {
-        MenuBarExtra {
-            Text(timer.isStanding ? "🧍 Standing" : "🪑 Sitting")
-                .font(.headline)
+        Settings { EmptyView() }
+    }
+}
 
-            Text(String(format: "%02d:%02d remaining", timer.remainingMinutes, timer.remainingSeconds % 60))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private var statusItem: NSStatusItem!
+    private var timer: StintTimer!
+    private var statusBarTimer: Timer?
+    private var timerMenuItem: NSMenuItem!
+    private var statusMenuItem: NSMenuItem!
+    private var switchMenuItem: NSMenuItem!
+    private var launchAtLoginMenuItem: NSMenuItem!
+    private var showTimeMenuItem: NSMenuItem!
+    private let standingImage = NSImage(systemSymbolName: "figure.stand", accessibilityDescription: "Stint")
+    private let sittingImage = NSImage(systemSymbolName: "figure.seated.side", accessibilityDescription: "Stint")
 
-            Divider()
+    private var showTimeInMenuBar: Bool {
+        get { UserDefaults.standard.object(forKey: "showTimeInMenuBar") == nil
+                ? true
+                : UserDefaults.standard.bool(forKey: "showTimeInMenuBar") }
+        set { UserDefaults.standard.set(newValue, forKey: "showTimeInMenuBar") }
+    }
 
-            Button("Switch Now") {
-                timer.switchNow()
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        timer = StintTimer(notifier: SystemNotifier())
+
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+
+        let menu = NSMenu()
+        menu.delegate = self
+
+        statusMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        statusMenuItem.isEnabled = false
+        menu.addItem(statusMenuItem)
+
+        timerMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        timerMenuItem.isEnabled = false
+        menu.addItem(timerMenuItem)
+
+        menu.addItem(.separator())
+
+        switchMenuItem = NSMenuItem(title: "Switch Now", action: #selector(switchNow), keyEquivalent: "")
+        switchMenuItem.target = self
+        menu.addItem(switchMenuItem)
+
+        showTimeMenuItem = NSMenuItem(title: "Show Time in Menu Bar", action: #selector(toggleShowTime), keyEquivalent: "")
+        showTimeMenuItem.target = self
+        menu.addItem(showTimeMenuItem)
+
+        launchAtLoginMenuItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginMenuItem.target = self
+        menu.addItem(launchAtLoginMenuItem)
+
+        menu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quitItem)
+
+        statusItem.menu = menu
+
+        startUpdatingStatusBar()
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        updateMenuItems()
+    }
+
+    private func updateMenuItems() {
+        let status = timer.isStanding ? "🧍 Standing" : "🪑 Sitting"
+        statusMenuItem.title = status
+
+        let time = String(format: "%02d:%02d remaining", timer.remainingMinutes, timer.remainingSeconds % 60)
+        timerMenuItem.title = time
+
+        showTimeMenuItem.state = showTimeInMenuBar ? .on : .off
+        launchAtLoginMenuItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
+    }
+
+    private func startUpdatingStatusBar() {
+        statusBarTimer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.updateStatusBarIcon()
             }
+        }
+        RunLoop.main.add(statusBarTimer!, forMode: .common)
+        updateStatusBarIcon()
+    }
 
-            Toggle("Launch at Login", isOn: Binding(
-                get: { SMAppService.mainApp.status == .enabled },
-                set: { newValue in
-                    try? newValue ? SMAppService.mainApp.register() : SMAppService.mainApp.unregister()
-                }
-            ))
+    private func updateStatusBarIcon() {
+        guard let button = statusItem.button else { return }
 
-            Divider()
+        let image = timer.isStanding ? standingImage : sittingImage
+        button.image = image
+        button.contentTintColor = timer.isBlinking && !timer.blinkVisible ? .clear : nil
+        button.title = timer.isBlinking && !timer.blinkVisible ? "" : (showTimeInMenuBar ? " \(timer.remainingMinutes)m" : "")
+        button.imagePosition = .imageLeading
 
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q")
-        } label: {
-            let icon = timer.isStanding ? "figure.stand" : "figure.seated.side"
-            if timer.isBlinking && timer.blinkVisible {
-                Label("\(timer.remainingMinutes)m", systemImage: icon)
-            } else if timer.isBlinking {
-                Text("       ")
-            } else {
-                Label("\(timer.remainingMinutes)m", systemImage: icon)
-            }
+        if statusItem.button?.isHighlighted == true {
+            updateMenuItems()
+        }
+    }
+
+    @objc private func switchNow() {
+        timer.switchNow()
+    }
+
+    @objc private func toggleShowTime() {
+        showTimeInMenuBar.toggle()
+        updateStatusBarIcon()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        if SMAppService.mainApp.status == .enabled {
+            try? SMAppService.mainApp.unregister()
+        } else {
+            try? SMAppService.mainApp.register()
         }
     }
 }
@@ -98,7 +180,6 @@ final class StintTimer {
         isStanding.toggle()
         remainingSeconds = 30 * 60
         notifier.send(isStanding: isStanding)
-        startBlinking()
     }
 
     private func startBlinking() {
@@ -125,6 +206,7 @@ final class StintTimer {
                 remainingSeconds -= 1
                 if remainingSeconds <= 0 {
                     switchNow()
+                    startBlinking()
                 }
             }
         }
