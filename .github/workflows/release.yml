@@ -55,9 +55,10 @@ jobs:
 
       - name: Create .app bundle
         run: |
-          mkdir -p Stint.app/Contents/MacOS
+          mkdir -p Stint.app/Contents/MacOS Stint.app/Contents/Resources
           cp Stint-universal Stint.app/Contents/MacOS/Stint
           cp Info.plist Stint.app/Contents/Info.plist
+          cp AppIcon.icns Stint.app/Contents/Resources/AppIcon.icns
 
       - name: Sign
         run: |
