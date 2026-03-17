@@ -84,10 +84,13 @@ jobs:
 
           xcrun stapler staple Stint.app
 
-      - name: Create zip
-        run: ditto -c -k --keepParent Stint.app "Stint-${TAG}.zip"
+      - name: Create dmg
+        run: |
+          npm install -g create-dmg
+          create-dmg Stint.app .
+          mv *.dmg "Stint-${TAG}.dmg"
 
       - name: Create GitHub Release
-        run: gh release create "$TAG" "Stint-${TAG}.zip" --generate-notes
+        run: gh release create "$TAG" "Stint-${TAG}.dmg" --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
