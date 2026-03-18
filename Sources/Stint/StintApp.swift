@@ -136,7 +136,7 @@ protocol Notifier: Sendable {
 
 struct SystemNotifier: Notifier {
     func requestPermission() {
-        Task.detached {
+        Task { @MainActor in
             try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
         }
     }
