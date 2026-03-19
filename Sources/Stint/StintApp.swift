@@ -1,7 +1,7 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @main
 struct StintApp: App {
@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var switchMenuItem: NSMenuItem!
     private var launchAtLoginMenuItem: NSMenuItem!
     private var showTimeMenuItem: NSMenuItem!
+    private var notificationWarningMenuItem: NSMenuItem!
+    private var notificationWarningSeparator: NSMenuItem!
     private let standingImage = NSImage(systemSymbolName: "figure.stand", accessibilityDescription: "Stint")
     private let sittingImage = NSImage(systemSymbolName: "figure.seated.side", accessibilityDescription: "Stint")
 
@@ -39,6 +41,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.delegate = self
+
+        notificationWarningMenuItem = NSMenuItem(title: "⚠️ Notifications are disabled — Open Settings", action: #selector(openNotificationSettings), keyEquivalent: "")
+        notificationWarningMenuItem.target = self
+        notificationWarningMenuItem.isHidden = true
+        menu.addItem(notificationWarningMenuItem)
+
+        notificationWarningSeparator = NSMenuItem.separator()
+        notificationWarningSeparator.isHidden = true
+        menu.addItem(notificationWarningSeparator)
 
         statusMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
@@ -74,6 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         updateMenuItems()
+        Task { @MainActor in
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            let disabled = settings.authorizationStatus == .denied
+            notificationWarningMenuItem.isHidden = !disabled
+            notificationWarningSeparator.isHidden = !disabled
+        }
     }
 
     private func updateMenuItems() {
@@ -109,6 +126,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if statusItem.button?.isHighlighted == true {
             updateMenuItems()
         }
+    }
+
+    @objc private func openNotificationSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
     }
 
     @objc private func switchNow() {
