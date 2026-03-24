@@ -76,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         launchAtLoginMenuItem.target = self
         menu.addItem(launchAtLoginMenuItem)
 
+        let checkForUpdatesItem = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        checkForUpdatesItem.target = self
+        menu.addItem(checkForUpdatesItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -149,6 +153,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleShowTime() {
         showTimeInMenuBar.toggle()
         updateStatusBarIcon()
+    }
+
+    @objc private func checkForUpdates() {
+        Task {
+            do {
+                try await AppUpdater.checkForUpdates()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Update Failed"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+        }
     }
 
     @objc private func toggleLaunchAtLogin() {
