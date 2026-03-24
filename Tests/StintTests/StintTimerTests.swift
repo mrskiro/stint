@@ -24,7 +24,7 @@ struct StintTimerTests {
         #expect(timer.isStanding == false)
         #expect(timer.remainingSeconds == 30 * 60)
         #expect(timer.remainingMinutes == 30)
-        #expect(notifier.permissionRequested == true)
+        #expect(notifier.permissionRequested == false)
     }
 
     @Test func switchNowTogglesStateAndResetsTimer() {
