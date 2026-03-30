@@ -17,7 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var notifier: Notifier!
     private var statusItem: NSStatusItem!
     private var timer: StintTimer!
-    private var hasRequestedPermission = false
     private var statusBarTimer: Timer?
     private var timerMenuItem: NSMenuItem!
     private var statusMenuItem: NSMenuItem!
@@ -38,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         notifier = SystemNotifier()
+        notifier.requestPermission()
         timer = StintTimer(notifier: notifier)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -88,13 +88,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = menu
 
         startUpdatingStatusBar()
-    }
-
-    func applicationDidBecomeActive(_ notification: Notification) {
-        if !hasRequestedPermission {
-            hasRequestedPermission = true
-            notifier.requestPermission()
-        }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
