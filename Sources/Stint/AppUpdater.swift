@@ -60,17 +60,16 @@ enum AppUpdater {
     private static func mountDMG(_ url: URL) async throws -> URL {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        process.arguments = ["attach", url.path, "-nobrowse", "-quiet", "-mountrandom", "/tmp"]
+        process.arguments = ["attach", url.path, "-nobrowse", "-mountrandom", "/tmp"]
         let pipe = Pipe()
         process.standardOutput = pipe
         try process.run()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
             throw UpdateError.dmgMountFailed
         }
-
-        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         guard let mountLine = output.split(separator: "\n").last,
               let mountPath = mountLine.split(separator: "\t").last else {
             throw UpdateError.dmgMountFailed
